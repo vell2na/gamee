@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Breakout Game Level</title>
+  <style>
+    body {
+      text-align: center;
+      background: #222;
+      color: white;
+      font-family: Arial;
+    }
+    h1 {
+      margin: 10px;
+    }
+    canvas {
+      background: #000;
+      display: block;
+      margin: 10px auto;
+      border: 2px solid #fff;
+      position: relative;
+      z-index: 1;
+    }
+    button {
+      padding: 10px 20px;
+      background: #0f0;
+      color: #000;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:active {
+      background: #0c0;
+    }
+    /* Overlay untuk level up */
+    #levelOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      color: #0f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      font-weight: bold;
+      z-index: 2;
+      opacity: 0;
+      transition: opacity 0.5s;
+      pointer-events: none;
+    }
+    .show {
+      opacity: 1;
+    }
+    .container {
+      position: relative;
+      width: 300px;
+      margin: 0 auto;
+    }
+    /* Overlay Game Over */
+    #gameOverOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      z-index: 3;
+      opacity: 0;
+      transition: opacity 0.5s;
+      pointer-events: none;
+    }
+    #gameOverOverlay.show {
+      opacity: 1;
+      pointer-events: all;
+    }
+    #restartBtn {
+      margin-top: 15px;
+      background: #f00;
+      color: #fff;
+      font-weight: bold;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    #restartBtn:hover {
+      background: #c00;
+    }
+  </style>
+</head>
+<body>
+  <h1>Breakout Game - Level</h1>
+  <button id="startBtn">Start Game</button>
+  <div class="container">
+    <canvas id="breakout" width="300" height="400"></canvas>
+    <div id="levelOverlay"></div>
+    <div id="gameOverOverlay">
+      <div id="gameOverText"></div>
+      <button id="restartBtn">Restart</button>
+    </div>
+  </div>
+  <p>Geser layar ke kiri/kanan untuk menggerakkan paddle</p>
+
+  <script>
+    const canvas = document.getElementById("breakout");
+    const ctx = canvas.getContext("2d");
+    const startBtn = document.getElementById("startBtn");
+    const levelOverlay = document.getElementById("levelOverlay");
+    const gameOverOverlay = document.getElementById("gameOverOverlay");
+    const gameOverText = document.getElementById("gameOverText");
+    const restartBtn = document.getElementById("restartBtn");
+
+    let paddleHeight = 10, paddleWidth = 75;
+    let paddleX = (canvas.width - paddleWidth) / 2;
+    let rightPressed = false, leftPressed = false;
+
+    let ballRadius = 5;
+    let x = canvas.width / 2;
+    let y = canvas.height - 30;
+    let dx = 2, dy = -2;
+
+    let brickRowCount = 3, brickColumnCount = 5;
+    let brickWidth = 50, brickHeight = 15, brickPadding = 10, brickOffsetTop = 30, brickOffsetLeft = 10;
+    let bricks = [];
+    let score = 0;
+    let level = 1;
+    let gameRunning = false;
+
+    function resetBricks() {
+      bricks = [];
+      for (let c = 0; c < brickColumnCount; c++) {
+        bricks[c] = [];
+        for (let r = 0; r < brickRowCount; r++) {
+          bricks[c][r] = { x: 0, y: 0, status: 1 };
+        }
+      }
+    }
+
+    function resetGame(fullReset = true) {
+      paddleX = (canvas.width - paddleWidth) / 2;
+      x = canvas.width / 2;
+      y = canvas.height - 30;
+      dx = 2 + (level - 1) * 0.5;
+      dy = -(2 + (level - 1) * 0.5);
+      if (fullReset) {
+        level = 1;
+        score = 0;
+      }
+      resetBricks();
+    }
+
+    function drawBall() {
+      ctx.beginPath();
+      ctx.arc(x, y, ballRadius, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff";
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    function drawPaddle() {
+      ctx.beginPath();
+      ctx.rect(paddleX, canvas.height - paddleHeight - 5, paddleWidth, paddleHeight);
+      ctx.fillStyle = "#00f";
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    function drawBricks() {
+      for (let c = 0; c < brickColumnCount; c++) {
+        for (let r = 0; r < brickRowCount; r++) {
+          if (bricks[c][r].status === 1) {
+            let brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
+            let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
+            bricks[c][r].x = brickX;
+            bricks[c][r].y = brickY;
+            ctx.beginPath();
+            ctx.rect(brickX, brickY, brickWidth, brickHeight);
+            ctx.fillStyle = "#0f0";
+            ctx.fill();
+            ctx.closePath();
+          }
+        }
+      }
+    }
+
+    function showLevelOverlay() {
+      levelOverlay.innerText = "LEVEL " + level;
+      levelOverlay.classList.add("show");
+      setTimeout(() => {
+        levelOverlay.classList.remove("show");
+      }, 2000);
+    }
+
+    function collisionDetection() {
+      let bricksLeft = 0;
+      for (let c = 0; c < brickColumnCount; c++) {
+        for (let r = 0; r < brickRowCount; r++) {
+          let b = bricks[c][r];
+          if (b.status === 1) {
+            bricksLeft++;
+            if (x > b.x && x < b.x + brickWidth && y > b.y && y < b.y + brickHeight) {
+              dy = -dy;
+              b.status = 0;
+              score++;
+            }
+          }
+        }
+      }
+
+      if (bricksLeft === 0) {
+        level++;
+        showLevelOverlay();
+        resetBricks();
+        x = canvas.width / 2;
+        y = canvas.height - 30;
+        dx = 2 + (level - 1) * 0.5;
+        dy = -(2 + (level - 1) * 0.5);
+      }
+    }
+
+    function showGameOver() {
+      gameOverText.innerHTML = `GAME OVER<br>Skor Anda: ${score}`;
+      gameOverOverlay.classList.add("show");
+    }
+
+    function drawScoreAndLevel() {
+      ctx.font = "16px Arial";
+      ctx.fillStyle = "#fff";
+      ctx.fillText("Score: " + score, 10, 20);
+      ctx.fillText("Level: " + level, canvas.width - 80, 20);
+    }
+
+    function draw() {
+      if (!gameRunning) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBricks();
+      drawBall();
+      drawPaddle();
+      drawScoreAndLevel();
+      collisionDetection();
+
+      if (x + dx > canvas.width - ballRadius || x + dx < ballRadius) dx = -dx;
+      if (y + dy < ballRadius) dy = -dy;
+      else if (y + dy > canvas.height - ballRadius) {
+        if (x > paddleX && x < paddleX + paddleWidth) dy = -dy;
+        else {
+          gameRunning = false;
+          showGameOver();
+        }
+      }
+
+      if (rightPressed && paddleX < canvas.width - paddleWidth) paddleX += 5;
+      if (leftPressed && paddleX > 0) paddleX -= 5;
+
+      x += dx;
+      y += dy;
+
+      requestAnimationFrame(draw);
+    }
+
+    document.addEventListener("keydown", e => {
+      if (e.key === "Right" || e.key === "ArrowRight") rightPressed = true;
+      if (e.key === "Left" || e.key === "ArrowLeft") leftPressed = true;
+    });
+    document.addEventListener("keyup", e => {
+      if (e.key === "Right" || e.key === "ArrowRight") rightPressed = false;
+      if (e.key === "Left" || e.key === "ArrowLeft") leftPressed = false;
+    });
+
+    canvas.addEventListener("touchmove", e => {
+      const touchX = e.touches[0].clientX - canvas.getBoundingClientRect().left;
+      paddleX = touchX - paddleWidth / 2;
+      if (paddleX < 0) paddleX = 0;
+      if (paddleX + paddleWidth > canvas.width) paddleX = canvas.width - paddleWidth;
+      e.preventDefault();
+    }, { passive: false });
+
+    startBtn.addEventListener("click", () => {
+      resetGame(true);
+      gameRunning = true;
+      gameOverOverlay.classList.remove("show");
+      draw();
+    });
+
+    restartBtn.addEventListener("click", () => {
+      resetGame(true);
+      gameOverOverlay.classList.remove("show");
+      gameRunning = true;
+      draw();
+    });
+  </script>
+</body>
+</html>
